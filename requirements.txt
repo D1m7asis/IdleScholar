@@ -1,0 +1,6 @@
+schedule==1.2.2
+pillow==10.3.0
+future==1.0.0
+pystray==0.19.5
+pytest-playwright
+playwright==1.46.0
