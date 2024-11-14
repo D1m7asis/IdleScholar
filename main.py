@@ -1,23 +1,26 @@
+import configparser
 import ctypes
-import sys
-import tkinter as tk
-import winreg
-
-from playwright.sync_api import sync_playwright
-import schedule
-import time
-import threading
 import json
 import os
+import sys
+import threading
+import time
+import tkinter as tk
+import winreg
 from datetime import datetime
-from PIL import Image
-import pystray
-from pystray import MenuItem as item
-import configparser
 
+import pystray
+import schedule
+from PIL import Image
+from playwright.sync_api import sync_playwright
+from pystray import MenuItem as item
 
 APP_NAME = "IdleScholar"
-APP_PATH = f'"{sys.executable}"' if getattr(sys, 'frozen', False) else f'"{os.path.abspath(__file__)}"'
+APP_PATH = (
+    f'"{sys.executable}"'
+    if getattr(sys, "frozen", False)
+    else f'"{os.path.abspath(__file__)}"'
+)
 MUTEX = "Global\\D1m7.IdleScholar"
 SCHEDULE_FILE = "schedule.json"
 WEEK_DAYS = [
@@ -294,6 +297,7 @@ def enable_autostart(is_on_startup):
             except FileNotFoundError:
                 pass
 
+
 def open_settings():
     def on_ok():
         user_name = entry1.get()
@@ -326,7 +330,12 @@ def open_settings():
 
     is_on_startup = tk.BooleanVar()
     is_on_startup.set(is_autostart_enabled())
-    startup_check = tk.Checkbutton(settings_window, text="Запуск вместе с Windows", variable=is_on_startup, command=enable_autostart(is_on_startup))
+    startup_check = tk.Checkbutton(
+        settings_window,
+        text="Запуск вместе с Windows",
+        variable=is_on_startup,
+        command=enable_autostart(is_on_startup),
+    )
     startup_check.grid(row=2, column=1, padx=10, pady=5)
 
     ok_button = tk.Button(settings_window, text="OK", command=on_ok)
