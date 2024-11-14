@@ -1,11 +1,3 @@
-### Example user template template
-### Example user template
-
-# IntelliJ project files
-.idea
-*.iml
-out
-gen
-/chrome_user_data/
-/dist/
-/build/
+main.spec
+/.idea
+/build

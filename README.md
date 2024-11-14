@@ -13,7 +13,13 @@ IdleScholar – инструмент для автоматического по�
 
 ### Требования
 1. **Python 3.10**
-2. **Playwright**: Установите Playwright с помощью `pip install pytest-playwright`.
+2. **Playwright**: Установите Playwright с помощью \
+`pip install pytest-playwright`
+```bash 
+playwright install
+```
+
+
 3. **Зависимости**: Установите необходимые библиотеки:
     ```bash
    pip install -r requirements.txt

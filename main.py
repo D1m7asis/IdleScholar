@@ -17,7 +17,7 @@ import configparser
 
 
 APP_NAME = "IdleScholar"
-APP_PATH = os.path.abspath(__file__)
+APP_PATH = f'"{sys.executable}"' if getattr(sys, 'frozen', False) else f'"{os.path.abspath(__file__)}"'
 MUTEX = "Global\\D1m7.IdleScholar"
 SCHEDULE_FILE = "schedule.json"
 WEEK_DAYS = [
