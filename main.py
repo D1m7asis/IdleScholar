@@ -35,10 +35,11 @@ WEEK_DAYS = [
 CONFIG_FILE = "settings.cfg"
 global USER_NAME, CHROME_PATH
 
-if getattr(sys, 'frozen', False):
+if getattr(sys, "frozen", False):
     os.chdir(os.path.dirname(sys.executable))
 else:
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
 
 def check_single_instance():
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -223,6 +224,16 @@ def load_schedule():
         with open(SCHEDULE_FILE, "r") as f:
             tasks = json.load(f)
             for task in tasks:
+                week_schedule = {
+                    "Monday": schedule.every().monday,
+                    "Tuesday": schedule.every().tuesday,
+                    "Wednesday": schedule.every().wednesday,
+                    "Thursday": schedule.every().thursday,
+                    "Friday": schedule.every().friday,
+                    "Saturday": schedule.every().saturday,
+                    "Sunday": schedule.every().sunday,
+                }
+
                 day = task["week_day"]
                 time_str = task["time"]
                 url = task["url"]
@@ -389,9 +400,11 @@ if __name__ == "__main__":
         print("Программа уже запущена.")
         sys.exit(0)
 
+    print("Загрузка настроек..")
     load_settings()
 
     # GUI
+    print("Загрузка вёрстки..")
     root = tk.Tk()
     root.title("Расписание занятий")
     root.resizable(False, False)
@@ -444,14 +457,18 @@ if __name__ == "__main__":
 
     day_var.trace_add("write", update_tasks_for_day)
 
+    print("Загрузка расписания..")
     load_schedule()
 
     scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
     scheduler_thread.start()
 
     if is_autostart_enabled():
+        print("Свёрнуто в трей")
         root.withdraw()
+
     create_tray_icon()
 
     root.protocol("WM_DELETE_WINDOW", hide_window)
+    print("Успешный запуск!")
     root.mainloop()
