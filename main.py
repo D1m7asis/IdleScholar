@@ -35,6 +35,10 @@ WEEK_DAYS = [
 CONFIG_FILE = "settings.cfg"
 global USER_NAME, CHROME_PATH
 
+if getattr(sys, 'frozen', False):
+    os.chdir(os.path.dirname(sys.executable))
+else:
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 def check_single_instance():
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
