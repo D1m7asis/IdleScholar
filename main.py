@@ -2,6 +2,7 @@ import configparser
 import ctypes
 import json
 import os
+import random
 import sys
 import threading
 import time
@@ -33,7 +34,7 @@ WEEK_DAYS = [
     "Sunday",
 ]
 CONFIG_FILE = "settings.cfg"
-global USER_NAME, CHROME_PATH
+global USER_NAME, CHROME_PATH, AUTO_START
 
 if getattr(sys, "frozen", False):
     os.chdir(os.path.dirname(sys.executable))
@@ -52,6 +53,33 @@ def check_single_instance():
     return True
 
 
+def login_scenario(page):
+    input_name_selector = "#name"
+
+    # Ввод имени пользователя
+    if page.locator(input_name_selector).is_visible(timeout=0):
+        page.fill(input_name_selector, USER_NAME)
+        page.keyboard.press("Enter")
+        return
+
+    # Разрешение автозапуска видео
+    autoplay_button_selector = ".autoplay-video-allow-btn"
+    if page.locator(autoplay_button_selector).is_visible(timeout=0):
+        page.click(autoplay_button_selector)
+        page.wait_for_timeout(500)  # Даем странице немного времени
+
+    # Пропуск использования микрофона
+    continue_button_selectors = [
+        'button:has-text("продолжить без микрофона")',
+        'button:has-text("Присоединиться без устройств")'
+    ]
+
+    for selector in continue_button_selectors:
+        if page.locator(selector).is_visible(timeout=0):
+            page.click(selector)
+            page.wait_for_timeout(500)  # Ждем перед следующим шагом
+
+
 def open_link(url):
     with sync_playwright() as p:
         user_data_dir = os.path.join(os.getcwd(), "chrome_user_data")
@@ -60,7 +88,8 @@ def open_link(url):
             executable_path=CHROME_PATH,
             headless=False,
             args=[
-                "--use-fake-ui-for-media-stream",
+                "--use-fake-ui-for-media-stream",  # Отключает реальный доступ к камере/микрофону
+                "--use-fake-device-for-media-stream",  # Подставляет фейковое устройство
                 "--disable-blink-features=AutomationControlled",
                 "--disable-infobars",
                 "--no-sandbox",
@@ -69,40 +98,32 @@ def open_link(url):
                 "--disable-extensions",
                 "--disable-features=IsolateOrigins,site-per-process",
             ],
+            permissions=[],  # Запрещаем все разрешения
         )
-        page = browser.new_page()
-        page.add_init_script(
-            """
-        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-        Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
-        Object.defineProperty(navigator, 'platform', { get: () => 'Win32' });
-        Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3] });
-        """
-        )
-        page.goto(url)
-        page.wait_for_load_state("networkidle")
 
-        input_name_selector = "#name"
-        if page.locator(input_name_selector).is_visible():
-            page.fill(input_name_selector, USER_NAME)
-            page.keyboard.press("Enter")
-        else:
-            autoplay_button_selector = ".autoplay-video-allow-btn"
-            if page.locator(autoplay_button_selector).is_visible():
-                page.click(autoplay_button_selector)
+        # Запрещаем доступ к камере и микрофону
+        browser.grant_permissions([], origin=url)
 
-        continue_button_selector = 'button:has-text("продолжить без микрофона")'
-        if page.locator(continue_button_selector).is_visible():
-            page.click(continue_button_selector)
+        page = browser.new_page()  # Используем context.new_page()
 
-        start_time = time.time()
-        while time.time() - start_time < 2 * 60 * 60:
-            page.mouse.move(100, 100)
-            page.mouse.move(110, 110)
-            time.sleep(300)
+        try:
+            page.goto(url, timeout=60_000)  # 60 секунд на загрузку
+            page.wait_for_load_state("networkidle")
 
-        browser.close()
+            login_scenario(page)  # Выполняем сценарий логина
 
+            start_time = time.time()
+            while time.time() - start_time < 2 * 60 * 60:
+                x, y = random.randint(100, 200), random.randint(100, 200)
+                page.mouse.move(x, y)
+                time.sleep(random.randint(240, 360))  # Ожидание от 4 до 6 минут
+
+        except Exception as e:
+            print(f"Ошибка: {e}")  # Логируем ошибку, если что-то пошло не так
+
+        finally:
+            page.close()  # Явно закрываем страницу перед выходом
+            browser.close()
 
 def add_schedule(event=None):
     url = url_entry.get()
@@ -210,15 +231,6 @@ def save_schedule():
 
 def load_schedule():
     schedule.clear()
-    week_schedule = {
-        "Monday": schedule.every().monday,
-        "Tuesday": schedule.every().tuesday,
-        "Wednesday": schedule.every().wednesday,
-        "Thursday": schedule.every().thursday,
-        "Friday": schedule.every().friday,
-        "Saturday": schedule.every().saturday,
-        "Sunday": schedule.every().sunday,
-    }
 
     if os.path.exists(SCHEDULE_FILE):
         with open(SCHEDULE_FILE, "r") as f:
@@ -269,59 +281,68 @@ def load_settings():
             "chrome_path",
             fallback="C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
         )
+        auto_start = (
+            True
+            if config.get("Settings", "auto_start", fallback=False) == "True"
+            else False
+        )
     else:
         user_name = "student"
         chrome_path = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+        auto_start = False
 
-    global USER_NAME, CHROME_PATH
-    USER_NAME, CHROME_PATH = user_name, chrome_path
+    global USER_NAME, CHROME_PATH, AUTO_START
+    USER_NAME, CHROME_PATH, AUTO_START = user_name, chrome_path, auto_start
 
 
-def save_settings(user_name, chrome_path):
+def save_settings(user_name, chrome_path, auto_start):
     config = configparser.ConfigParser()
-    config["Settings"] = {"user_name": user_name, "chrome_path": chrome_path}
+    config["Settings"] = {
+        "user_name": user_name,
+        "chrome_path": chrome_path,
+        "auto_start": auto_start,
+    }
     with open(CONFIG_FILE, "w") as cfg:
         config.write(cfg)
 
     load_settings()
 
 
-def is_autostart_enabled():
-    """Проверяет, включён ли автозапуск."""
-    try:
-        key = winreg.HKEY_CURRENT_USER
-        subkey = r"Software\Microsoft\Windows\CurrentVersion\Run"
-
-        with winreg.OpenKey(key, subkey, 0, winreg.KEY_READ) as reg_key:
-            winreg.QueryValueEx(reg_key, APP_NAME)
-        return True
-    except FileNotFoundError:
-        return False
-
-
-def enable_autostart(is_on_startup):
+def enable_autostart(enable: bool):
     key = winreg.HKEY_CURRENT_USER
     subkey = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
+    print("Пробуем работать с автозагрузкой...")
+
     with winreg.OpenKey(key, subkey, 0, winreg.KEY_SET_VALUE) as reg_key:
-        if is_on_startup:
+        if enable:
             winreg.SetValueEx(reg_key, APP_NAME, 0, winreg.REG_SZ, APP_PATH)
+            print("Created registry file at path", key, subkey)
         else:
             try:
                 winreg.DeleteValue(reg_key, APP_NAME)
+                print("Deleted registry file at path", key, subkey)
             except FileNotFoundError:
-                pass
+                print("Error deleting registry file at path", key, subkey)
 
 
 def open_settings():
     def on_ok():
         user_name = entry1.get()
         chrome_path = entry2.get()
-        save_settings(user_name, chrome_path)
+        global AUTO_START
+        save_settings(user_name, chrome_path, AUTO_START)
         settings_window.destroy()
 
     def on_cancel():
         settings_window.destroy()
+
+    def trigger_autostart():
+        global AUTO_START
+
+        flag = is_on_startup.get()
+        enable_autostart(flag)
+        AUTO_START = flag
 
     settings_window = tk.Toplevel(root)
     settings_window.resizable(False, False)
@@ -343,13 +364,14 @@ def open_settings():
     entry2.insert(0, CHROME_PATH)
     entry2.grid(row=1, column=1, padx=10, pady=5)
 
+    global AUTO_START
     is_on_startup = tk.BooleanVar()
-    is_on_startup.set(is_autostart_enabled())
+    is_on_startup.set(AUTO_START)
     startup_check = tk.Checkbutton(
         settings_window,
         text="Запуск вместе с Windows",
         variable=is_on_startup,
-        command=enable_autostart(is_on_startup),
+        command=trigger_autostart,
     )
     startup_check.grid(row=2, column=1, padx=10, pady=5)
 
@@ -463,7 +485,7 @@ if __name__ == "__main__":
     scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
     scheduler_thread.start()
 
-    if is_autostart_enabled():
+    if AUTO_START:
         print("Свёрнуто в трей")
         root.withdraw()
 

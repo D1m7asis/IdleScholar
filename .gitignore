@@ -1,3 +1,5 @@
 main.spec
 /.idea
 /build
+/dist/chrome_user_data
+/chrome_user_data
