@@ -31,12 +31,12 @@ def login_scenario(self, page):
             page.wait_for_timeout(500)
 
 
-def send_message_scenario(self, page):
+def send_message_scenario(page, msg):
     input_message_selector = '[data-placeholder="Введите сообщение"]'
 
     try:
         if page.locator(input_message_selector).nth(0).is_visible(timeout=5000):
-            page.locator(input_message_selector).nth(0).fill(self.AUTO_MESSAGE)
+            page.locator(input_message_selector).nth(0).fill(msg)
             page.keyboard.press("Enter")
             print("Сообщение успешно отправлено.")
             return True
@@ -48,7 +48,7 @@ def send_message_scenario(self, page):
         return False
 
 
-def open_link(self, url):
+def open_link(self, url, msg):
     with sync_playwright() as p:
         user_data_dir = os.path.join(os.getcwd(), "chrome_user_data")
         browser = p.chromium.launch_persistent_context(
@@ -79,7 +79,8 @@ def open_link(self, url):
             page.wait_for_load_state("networkidle")
 
             login_scenario(self, page)  # Выполняем сценарий логина
-            send_message_scenario(self, page)
+            if msg:
+                send_message_scenario(page, msg)
 
             start_time = time.time()
             while time.time() - start_time < 2 * 60 * 60:

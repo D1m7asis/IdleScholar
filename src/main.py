@@ -11,6 +11,7 @@ import schedule
 from PIL import Image
 from pystray import MenuItem as item
 
+from browser_emulator import open_link
 from src.settings import (
     WEEK_DAYS,
     SCHEDULE_FILE,
@@ -20,12 +21,22 @@ from src.settings import (
     load_settings,
 )
 
-from browser_emulator import open_link
-
 if getattr(sys, "frozen", False):
     os.chdir(os.path.dirname(sys.executable))
 else:
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+
+def get_task_week():
+    return {
+        "Monday": schedule.every().monday,
+        "Tuesday": schedule.every().tuesday,
+        "Wednesday": schedule.every().wednesday,
+        "Thursday": schedule.every().thursday,
+        "Friday": schedule.every().friday,
+        "Saturday": schedule.every().saturday,
+        "Sunday": schedule.every().sunday,
+    }
 
 
 class IdleScholar:
@@ -34,12 +45,13 @@ class IdleScholar:
         self.CHROME_PATH: str = chrome_path
         self.AUTO_START: bool = auto_start
         self.APP_ICON: pystray.Icon = None
-        self.AUTO_MESSAGE: str = ""
 
     def add_schedule(self, event=None):
         url = url_entry.get()
         time_str = time_entry.get().replace(" ", ":")
         day = day_var.get()
+        msg = msg_entry.get()
+        msg = msg if msg else ''
 
         if not url or not time_str or not day:
             return
@@ -53,18 +65,10 @@ class IdleScholar:
         if len(time_hours) < 2:
             time_str = "0" + time_str
 
-        week_schedule = {
-            "Monday": schedule.every().monday,
-            "Tuesday": schedule.every().tuesday,
-            "Wednesday": schedule.every().wednesday,
-            "Thursday": schedule.every().thursday,
-            "Friday": schedule.every().friday,
-            "Saturday": schedule.every().saturday,
-            "Sunday": schedule.every().sunday,
-        }
+        week_schedule = get_task_week()
 
         schedule_time = week_schedule.get(day).at(time_str)
-        schedule_time.do(open_link, self, url)
+        schedule_time.do(open_link, self, url=url, msg=msg)
 
         self.save_schedule()
         self.update_tasks_for_day()
@@ -73,15 +77,13 @@ class IdleScholar:
     def delete_schedule(self):
         selected_index = task_list.curselection()
         if time_entry.get() or url_entry.get() or not selected_index:
-            time_entry.delete(0, tk.END)
-            url_entry.delete(0, tk.END)
+            self.clear_entries()
             return
 
         selected_task = task_list.get(selected_index)
         for job in schedule.get_jobs():
-            task_time = job.at_time.strftime("%H:%M")
-            task_url = job.job_func.args[1]
-            task_str = f"{task_time} - {task_url}"
+            task_str = self.get_task_str(job)
+
             if task_str == selected_task:
                 schedule.cancel_job(job)
                 break
@@ -89,6 +91,14 @@ class IdleScholar:
         task_list.delete(selected_index)
         self.save_schedule()
         self.clear_entries()
+
+    @staticmethod
+    def get_task_str(job):
+        task_time = job.at_time.strftime("%H:%M")
+        task_url = job.job_func.keywords["url"]
+        task_msg = job.job_func.keywords["msg"]
+        task_str = f"{task_time} | {task_msg} | {task_url}"
+        return task_str
 
     def edit_schedule(self, event):
         if url_entry.get() or time_entry.get():
@@ -99,21 +109,16 @@ class IdleScholar:
             return
 
         selected_task = task_list.get(selected_index)
-        time_str, url = selected_task.split(" - ")
+        time_str, msg, url = selected_task.split(" | ")
 
         # Устанавливаем выбранные значения в поля ввода
-        time_entry.delete(0, tk.END)
-        time_entry.insert(0, time_str)
-
-        url_entry.delete(0, tk.END)
-        url_entry.insert(0, url)
+        self.clear_entries()
+        self.set_entries(_time_entry=time_str, _url_entry=url, _msg_entry=msg)
 
         # Удаляем выбранную задачу из списка и планировщика
         task_list.delete(selected_index)
         for job in schedule.get_jobs():
-            task_time = job.at_time.strftime("%H:%M")
-            task_url = job.job_func.args[1]
-            if task_time == time_str and task_url == url:
+            if self.get_task_str(job) == selected_task:
                 schedule.cancel_job(job)
                 break
 
@@ -122,6 +127,12 @@ class IdleScholar:
     def clear_entries(self):
         time_entry.delete(0, tk.END)
         url_entry.delete(0, tk.END)
+        msg_entry.delete(0, tk.END)
+
+    def set_entries(self, _time_entry, _url_entry, _msg_entry):
+        time_entry.insert(0, _time_entry)
+        url_entry.insert(0, _url_entry)
+        msg_entry.insert(0, _msg_entry)
 
     def save_schedule(self):
         tasks = []
@@ -129,7 +140,8 @@ class IdleScholar:
             task = {
                 "week_day": WEEK_DAYS[job.next_run.weekday()],
                 "time": job.at_time.strftime("%H:%M"),
-                "url": job.job_func.args[1],
+                "url": job.job_func.keywords["url"],
+                "msg": job.job_func.keywords["msg"],
             }
             tasks.append(task)
 
@@ -144,28 +156,20 @@ class IdleScholar:
             with open(SCHEDULE_FILE, "r") as f:
                 tasks = json.load(f)
                 for task in tasks:
-                    week_schedule = self.get_task_week()
+                    week_schedule = get_task_week()
 
                     day = task["week_day"]
                     time_str = task["time"]
                     url = task["url"]
+                    msg = task.get("msg")
+                    msg = msg if msg else ''
+
                     schedule_time = week_schedule[day].at(time_str)
-                    schedule_time.do(open_link, self, url)
+                    schedule_time.do(open_link, self, url=url, msg=msg)
 
         today = datetime.today().strftime("%A")
         day_var.set(today)
         self.update_tasks_for_day()
-
-    def get_task_week(self):
-        return {
-            "Monday": schedule.every().monday,
-            "Tuesday": schedule.every().tuesday,
-            "Wednesday": schedule.every().wednesday,
-            "Thursday": schedule.every().thursday,
-            "Friday": schedule.every().friday,
-            "Saturday": schedule.every().saturday,
-            "Sunday": schedule.every().sunday,
-        }
 
     def update_tasks_for_day(self, *args):
         selected_day = day_var.get()
@@ -176,9 +180,7 @@ class IdleScholar:
         ]
         task_list.delete(0, tk.END)
         for task in day_tasks:
-            task_time = task.at_time.strftime("%H:%M")
-            task_url = task.job_func.args[1]
-            task_list.insert(tk.END, f"{task_time} - {task_url}")
+            task_list.insert(tk.END, self.get_task_str(task))
 
     def open_settings(self):
         def on_ok():
@@ -307,26 +309,14 @@ if __name__ == "__main__":
     delete_button = tk.Button(frame, text="Удалить", command=scholar.delete_schedule)
     delete_button.grid(row=3, column=1, pady=10)
 
-    def trigger_automsg():
-        if is_message.get():
-            msg_entry.config(state=tk.NORMAL)
-        else:
-            msg_entry.config(state=tk.DISABLED)
-
-        scholar.AUTO_MESSAGE = msg_entry.get()
-
-    is_message = tk.BooleanVar(value=True)
-    message_check = tk.Checkbutton(
+    msg_label = tk.Label(
         frame,
         text="Авто-сообщение в чат при заходе",
-        variable=is_message,
-        command=trigger_automsg,
     )
-    message_check.grid(row=4, column=0, columnspan=1, padx=1, pady=10)
+    msg_label.grid(row=4, column=0, columnspan=1, padx=1, pady=10)
 
-    msg_entry = tk.Entry(frame, textvariable=tk.Variable(value="+"))
+    msg_entry = tk.Entry(frame)
     msg_entry.grid(row=4, column=1)
-    trigger_automsg()
 
     tk.Label(frame, text="Задачи:").grid(row=5, column=0, columnspan=2, pady=10)
     task_list = tk.Listbox(frame, width=50, height=10)

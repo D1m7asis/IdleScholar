@@ -4,3 +4,4 @@ main.spec
 /dist/chrome_user_data
 /chrome_user_data
 /__pycache__
+/src/__pycache__
